@@ -45,126 +45,76 @@ function obj:sendMusicAppCommand(command)
   return success
 end
 
---- Sets the volume level of the Music app via accessibility API.
--- Recursively collects all sliders and adjusts the second one (volume slider).
+--- Sets the volume level of the Music app via AppleScript.
 -- Clamps the input to 0–100 range.
 --
 -- @param level (number): Volume level as a percentage (0-100)
 --
 -- @details
--- - Requires Accessibility permissions to be enabled for Music app
--- - The second slider in the UI hierarchy is assumed to be the volume control
--- - Shows alerts for success/failure and if app is not running
+-- - Uses AppleScript to set the sound volume directly
+-- - Automatically clamps the value to 0-100 range
+-- - Shows alerts for success/failure
 --
--- @return (boolean): Implicitly returns nil
+-- @return (number or nil): The new volume level if successful, nil otherwise
 function obj:changeMusicAppVolume(level)
     -- clamp to 0–100 range
     if level < 0 then level = 0 end
     if level > 100 then level = 100 end
 
-    local app = hs.application.get("Music")
-    if not app then
-        hs.alert("Music app not running")
-        return
-    end
+    local ok, result = hs.osascript.applescript(
+        string.format('tell application "Music" to set sound volume to %d', level)
+    )
 
-    local axApp = hs.axuielement.applicationElement(app)
-    if not axApp then
-        hs.alert("Accessibility not available for Music")
-        return
-    end
-
-    -- recursively collect all sliders
-    local sliders = {}
-    local function collectSliders(element)
-        if not element or not element:attributeValue("AXChildren") then return end
-        for _, child in ipairs(element:attributeValue("AXChildren")) do
-            if child:attributeValue("AXRole") == "AXSlider" then
-                table.insert(sliders, child)
-            end
-            collectSliders(child)
-        end
-    end
-
-    collectSliders(axApp)
-
-    if #sliders < 2 then
-        hs.alert(string.format("Found %d slider(s), but expected at least 2", #sliders))
-        return
-    end
-
-    -- The *second* slider is the volume
-    local volumeSlider = sliders[2]
-    local normalized = level / 100.0
-
-    -- set the new value
-    local ok = volumeSlider:setAttributeValue("AXValue", normalized)
     if ok then
         hs.alert(string.format("Music volume set to %d%%", level))
+        return level
     else
         hs.alert("Failed to set Music volume")
+        return nil
     end
 end
 
 
 
---- Gets the current volume level of the Music app via accessibility API.
--- Recursively collects all sliders and reads the value of the second one (volume slider).
--- Converts the normalized value (0.0–1.0) to a percentage (0–100).
+--- Gets the current volume level of the Music app via AppleScript.
 --
 -- @return (number or nil): Volume as a percentage (0-100), or nil if unavailable
 --
 -- @details
--- - Requires Accessibility permissions to be enabled for Music app
--- - The second slider in the UI hierarchy is assumed to be the volume control
--- - Shows alerts for errors and current volume when successfully read
+-- - Uses AppleScript to query the Music app directly
+-- - Returns the sound volume value from the Music application
 --
 -- @note
--- Returns nil if Music app is not running, accessibility is unavailable, or read fails
+-- Returns nil if Music app is not running or the query fails
 function obj:getMusicAppVolume()
-    local app = hs.application.get("Music")
-    if not app then
-        hs.alert("Music app not running")
-        return nil
-    end
+    local ok, result = hs.osascript.applescript('tell application "Music" to get sound volume')
 
-    local axApp = hs.axuielement.applicationElement(app)
-    if not axApp then
-        hs.alert("Accessibility not available for Music")
-        return nil
-    end
-
-    -- collect all sliders
-    local sliders = {}
-    local function collectSliders(element)
-        if not element or not element:attributeValue("AXChildren") then return end
-        for _, child in ipairs(element:attributeValue("AXChildren")) do
-            if child:attributeValue("AXRole") == "AXSlider" then
-                table.insert(sliders, child)
-            end
-            collectSliders(child)
+    if ok and result then
+        local volume = tonumber(result)
+        if volume then
+            hs.alert(string.format("Music volume: %d%%", volume))
+            return volume
         end
     end
 
-    collectSliders(axApp)
+    hs.alert("Could not read Music volume")
+    return nil
+end
 
-    if #sliders < 2 then
-        hs.alert(string.format("Found %d slider(s), expected at least 2", #sliders))
+--- Changes the volume by a given percentage amount.
+-- Gets the current volume, adds the delta, and clamps to 0–100 range.
+--
+-- @param delta (number): The percentage amount to change volume by (can be negative)
+--
+-- @return (number or nil): The new volume level if successful, nil otherwise
+function obj:changeVolume(delta)
+    local currentVolume = self:getMusicAppVolume()
+    if not currentVolume then
         return nil
     end
 
-    -- The second slider is the volume control
-    local volumeSlider = sliders[2]
-    local value = volumeSlider:attributeValue("AXValue")
-
-    if value then
-        local percent = math.floor(value * 100)
-        hs.alert(string.format("Music volume: %d%%", percent))
-        return percent
-    else
-        hs.alert("Could not read Music volume")
-        return nil
-    end
+    local newVolume = currentVolume + delta
+    return self:changeMusicAppVolume(newVolume)
 end
 
 

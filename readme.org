@@ -8,8 +8,8 @@ A Hammerspoon spoon for controlling Apple Music playback and volume.
 
 - *Playback Control*: Play/pause, next track, previous track
 - *Track Info*: Get and display current track name, artist, and album
-- *Volume Control*: Set Music app volume (0-100) via accessibility API
-- *Accessibility API*: Direct volume manipulation through UI sliders
+- *Volume Control*: Set and get Music app volume (0-100) via AppleScript
+- *Volume Delta*: Change volume by a percentage amount (increase/decrease)
 
 ** Playback Control
 
@@ -24,8 +24,9 @@ A Hammerspoon spoon for controlling Apple Music playback and volume.
 
 ** Volume Control
 
-- =changeMusicAppVolume(level)= - Set volume (0-100 percent)
+- =changeMusicAppVolume(level)= - Set volume to a specific level (0-100 percent); returns new volume or nil
 - =getMusicAppVolume()= - Get current volume as percentage (0-100)
+- =changeVolume(delta)= - Change volume by a given amount (can be negative); returns new volume or nil
 
 
 ** Low-Level
@@ -49,24 +50,23 @@ music:nextMusicAppTrack()
 -- Show current track with artist and album
 music:showMusicAppCurrentTrack()
 
--- Get current volume and increase by 20%
-local currentVol = music:getMusicAppVolume()
-if currentVol then
-  music:changeMusicAppVolume(currentVol + 20)
-end
-
 -- Set volume to specific level (50%)
 music:changeMusicAppVolume(50)
+
+-- Increase volume by 10%
+music:changeVolume(10)
+
+-- Decrease volume by 5%
+music:changeVolume(-5)
 #+END_SRC
 
 * Requirements
 
 - macOS with Apple Music app
-- Hammerspoon with accessibility permissions enabled
-- For volume control: Accessibility API access to Music app
+- Hammerspoon
 
 * Notes
 
-- Volume control uses the second slider in Music app UI (volume slider)
+- Volume control uses AppleScript to directly query and set the Music app volume
 - Track info includes artist and album in formatted output
 - All operations gracefully handle errors with user alerts
