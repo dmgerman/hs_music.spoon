@@ -1,63 +1,148 @@
 #+TITLE: hs_music Spoon
 #+AUTHOR: Daniel M German
-#+VERSION: 0.1
+#+VERSION: 0.2
 
 A Hammerspoon spoon for controlling Apple Music playback and volume.
 
 * Features
 
-- *Playback Control*: Play/pause, next track, previous track
+- *Playback Control*: Play/pause, next/previous track, skip to next album
 - *Track Info*: Get and display current track name, artist, and album
-- *Volume Control*: Set and get Music app volume (0-100) via AppleScript
-- *Volume Delta*: Change volume by a percentage amount (increase/decrease)
+- *Volume Control*: Set, get, and adjust Music app volume (0-100)
+- *Hotkey Bindings*: Fully configurable hotkey support for all operations
+- *Non-blocking*: Album skip uses async callbacks to not block Hammerspoon
 
 ** Playback Control
 
-- =toggleMusicAppPlayPause()= - Play or pause current track
-- =nextMusicAppTrack()= - Skip to next track
-- =previousMusicAppTrack()= - Go to previous track
+- =togglePlayPause()= - Play or pause current track
+- =nextTrack()= - Skip to next track
+- =previousTrack()= - Go to previous track
+- =nextAlbum()= - Skip to the next album (asynchronous, non-blocking)
 
 ** Track Information
 
-- =getMusicAppCurrentTrack()= - Returns formatted string: "TrackName - Artist [Album]"
-- =showMusicAppCurrentTrack()= - Display track info in alert (uses =alertDuration=)
+- =getCurrentTrack()= - Returns formatted track info (customizable via =trackFormat=)
+- =getCurrentArtist()= - Returns current artist name
+- =showCurrentTrack()= - Display track info in alert (uses =alertDuration= and =trackFormat=)
 
 ** Volume Control
 
-- =setMusicAppVolume(level)= - Set volume to a specific level (0-100 percent); returns new volume or nil
-- =getMusicAppVolume()= - Get current volume as percentage (0-100)
-- =adjustMusicAppVolume(delta)= - Adjust volume by a given amount (can be negative); returns new volume or nil
+- =setVolume(level)= - Set volume to a specific level (0-100 percent); returns new volume or nil
+- =getVolume()= - Get current volume as percentage (0-100)
+- =adjustVolume(delta)= - Adjust volume by a given amount (can be negative); returns new volume or nil
 
+* Configuration
 
-** Low-Level
+** Alert Duration
+Customize how long track info alerts display:
+#+BEGIN_SRC lua
+music.alertDuration = 3  -- seconds
+#+END_SRC
 
-- =sendMusicAppCommand(command)= - Send raw AppleScript command to Music app
+** Track Format
+Customize how track information is displayed using placeholders:
+- ={name}= - Track name
+- ={artist}= - Artist name
+- ={album}= - Album name
+
+Examples:
+#+BEGIN_SRC lua
+-- Default format
+music.trackFormat = "{name} - {artist} [{album}]"
+
+-- Artist first
+music.trackFormat = "{artist} - {name}"
+
+-- Album only
+music.trackFormat = "{album} / {name}"
+
+-- Minimal format
+music.trackFormat = "{name}"
+#+END_SRC
+
+** Album Skip Attempts
+Configure the maximum number of track skips when using =nextAlbum()=:
+#+BEGIN_SRC lua
+-- Default is 20
+music.maxAlbumSkipAttempts = 20
+
+-- Set lower for faster timeout (useful if albums are small)
+music.maxAlbumSkipAttempts = 10
+
+-- Set higher for longer playlists or more patience
+music.maxAlbumSkipAttempts = 50
+#+END_SRC
+
+** Hotkey Bindings
+
+Configure hotkey bindings to control Music playback:
+- =togglePlayPause= - Hotkey for play/pause
+- =nextTrack= - Hotkey for next track
+- =previousTrack= - Hotkey for previous track
+- =showTrack= - Hotkey to display current track info
+- =skipAlbum= - Hotkey to skip to next album
+
+Each hotkey requires =mods= (modifiers array) and =key= (key name):
+#+BEGIN_SRC lua
+music:init({
+  togglePlayPause = { mods = {"cmd", "shift"}, key = "p" },
+  nextTrack = { mods = {"cmd", "shift"}, key = "n" },
+  previousTrack = { mods = {"cmd", "shift"}, key = "b" },
+  showTrack = { mods = {"cmd", "shift"}, key = "i" },
+  skipAlbum = { mods = {"cmd", "shift"}, key = "a" }
+})
+#+END_SRC
+
+Available modifiers: =cmd=, =alt=, =shift=, =ctrl=
 
 * Example Usage
+
+** Complete Setup
 
 #+BEGIN_SRC lua
 local music = hs.loadSpoon("hs_music")
 
--- Set alert duration to 3 seconds
+-- Configure display options
 music.alertDuration = 3
+music.trackFormat = "{artist} - {name}"
+
+-- Initialize with hotkey bindings
+music:init({
+  togglePlayPause = { mods = {"cmd", "shift"}, key = "p" },
+  nextTrack = { mods = {"cmd", "shift"}, key = "n" },
+  previousTrack = { mods = {"cmd", "shift"}, key = "b" },
+  showTrack = { mods = {"cmd", "shift"}, key = "i" },
+  skipAlbum = { mods = {"cmd", "shift"}, key = "a" }
+})
+#+END_SRC
+
+** Manual Control
+
+You can also call functions directly without hotkeys:
+
+#+BEGIN_SRC lua
+local music = hs.loadSpoon("hs_music")
 
 -- Toggle play/pause
-music:toggleMusicAppPlayPause()
+music:togglePlayPause()
 
 -- Skip to next track
-music:nextMusicAppTrack()
+music:nextTrack()
 
--- Show current track with artist and album
-music:showMusicAppCurrentTrack()
+-- Skip to next album (asynchronous)
+music:nextAlbum()
+
+-- Show current track with custom format
+music:showCurrentTrack()
 
 -- Set volume to specific level (50%)
-music:setMusicAppVolume(50)
+music:setVolume(50)
 
 -- Increase volume by 10%
-music:adjustMusicAppVolume(10)
+music:adjustVolume(10)
 
 -- Decrease volume by 5%
-music:adjustMusicAppVolume(-5)
+music:adjustVolume(-5)
 #+END_SRC
 
 * Requirements
@@ -67,6 +152,7 @@ music:adjustMusicAppVolume(-5)
 
 * Notes
 
-- Volume control uses AppleScript to directly query and set the Music app volume
-- Track info includes artist and album in formatted output
+- Uses native =hs.itunes= API for reliable playback and track information
+- All operations verify Music app is running before executing
+- Track info can be customized using =trackFormat= placeholders
 - All operations gracefully handle errors with user alerts

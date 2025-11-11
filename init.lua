@@ -1,5 +1,5 @@
 --- Music control spoon for Hammerspoon.
--- Provides utilities for controlling music playback across various music applications.
+-- Provides utilities for controlling music playback using hs.itunes.
 --
 -- @author dmg
 -- @module hs_music
@@ -9,7 +9,7 @@ obj.__index = obj
 
 --- Metadata about the spoon.
 obj.name = "hs_music"
-obj.version = "0.1"
+obj.version = "0.2"
 obj.author = "Daniel M German <dmg@turingmachine.org>"
 obj.homepage = "https://github.com/Hammerspoon/Spoons"
 obj.license = "MIT"
@@ -18,87 +18,176 @@ obj.license = "MIT"
 -- @field alertDuration (number): Duration in seconds for track info alerts (default: 5)
 obj.alertDuration = 5
 
---- Logger for debugging.
-local logger = hs.logger.new(obj.name)
+-- @field trackFormat (string): Format string for displaying track info
+-- Available placeholders: {name}, {artist}, {album}
+-- Default: "{name} - {artist} [{album}]"
+obj.trackFormat = "Track: {name}\nArtist: {artist}\nAlbum: {album}"
 
---- Sends a command to the currently playing music application.
+-- @field maxAlbumSkipAttempts (number): Maximum number of track skips when trying to reach next album (default: 20)
+obj.maxAlbumSkipAttempts = 20
+
+--- Helper to ensure Music is running, show alert if not.
 --
--- @param command (string): The command to send (e.g., "playpause", "next", "previous")
--- @return (boolean): true if command was sent, false otherwise
-function obj:sendMusicAppCommand(command)
-  if not command or command == "" then
-    logger:e("Invalid command: " .. tostring(command))
+-- @return (boolean): true if Music is running, false otherwise (alert shown on failure)
+function obj:_ensureMusicRunning()
+  if not hs.itunes.isRunning() then
+    hs.alert.show("Music app is not running")
+    return false
+  end
+  return true
+end
+
+--- Helper to format track info using the configured trackFormat attribute.
+--
+-- @param name (string): Track name
+-- @param artist (string): Artist name
+-- @param album (string): Album name
+-- @return (string): Formatted track info string
+function obj:_formatTrackInfo(name, artist, album)
+  if not name then
+    return nil
+  end
+
+  name = name or "Unknown"
+  artist = artist or "Unknown"
+  album = album or "Unknown"
+
+  local formatted = self.trackFormat
+    :gsub("{name}", name)
+    :gsub("{artist}", artist)
+    :gsub("{album}", album)
+
+  return formatted
+end
+
+--- Plays or pauses the current track.
+--
+-- @return (boolean): true if successful, false otherwise
+function obj:togglePlayPause()
+  if not self:_ensureMusicRunning() then
+    return false
+  end
+  hs.itunes.playpause()
+  return true
+end
+
+--- Plays the next track.
+--
+-- @return (boolean): true if successful, false otherwise
+function obj:nextTrack()
+  if not self:_ensureMusicRunning() then
+    return false
+  end
+  hs.itunes.next()
+  return true
+end
+
+--- Plays the previous track.
+--
+-- @return (boolean): true if successful, false otherwise
+function obj:previousTrack()
+  if not self:_ensureMusicRunning() then
+    return false
+  end
+  hs.itunes.previous()
+  return true
+end
+
+--- Gets the currently playing track information (name, artist, album).
+-- Formatted according to the trackFormat attribute.
+--
+-- @return (string or nil): Formatted track info if playing, nil otherwise
+function obj:getCurrentTrack()
+  if not self:_ensureMusicRunning() then
+    return nil
+  end
+
+  local name = hs.itunes.getCurrentTrack()
+  if not name then
+    return nil
+  end
+
+  local artist = hs.itunes.getCurrentArtist()
+  local album = hs.itunes.getCurrentAlbum()
+
+  return self:_formatTrackInfo(name, artist, album)
+end
+
+--- Gets the current artist name.
+--
+-- @return (string or nil): Artist name, or nil if unavailable
+function obj:getCurrentArtist()
+  if not self:_ensureMusicRunning() then
+    return nil
+  end
+
+  return hs.itunes.getCurrentArtist()
+end
+
+--- Shows current track information in an alert.
+--
+-- @return (boolean): true if successful, false otherwise
+--
+-- @details
+-- - Displays track info formatted according to trackFormat attribute
+-- - Uses the `alertDuration` attribute (default: 5 seconds)
+-- - Customize format: `music.trackFormat = "{artist} - {name}"`
+-- - Customize duration: `music.alertDuration = 3`
+function obj:showCurrentTrack()
+  if not self:_ensureMusicRunning() then
     return false
   end
 
-  local success = pcall(function()
-    hs.osascript.applescript(string.format(
-      'tell application "Music" to %s',
-      command
-    ))
-  end)
-
-  if not success then
-    logger:w("Failed to send command: " .. command)
+  local name = hs.itunes.getCurrentTrack()
+  if not name then
+    hs.alert.show("No track currently playing", self.alertDuration)
+    return false
   end
 
-  return success
+  local artist = hs.itunes.getCurrentArtist()
+  local album = hs.itunes.getCurrentAlbum()
+
+  local trackInfo = self:_formatTrackInfo(name, artist, album)
+  hs.alert.show(trackInfo, self.alertDuration)
+  return true
 end
 
---- Sets the volume level of the Music app via AppleScript.
+--- Sets the volume level of the Music app.
 -- Clamps the input to 0–100 range.
 --
 -- @param level (number): Volume level as a percentage (0-100)
 --
--- @details
--- - Uses AppleScript to set the sound volume directly
--- - Automatically clamps the value to 0-100 range
--- - Shows alerts for success/failure
---
 -- @return (number or nil): The new volume level if successful, nil otherwise
-function obj:setMusicAppVolume(level)
-    -- clamp to 0–100 range
-    if level < 0 then level = 0 end
-    if level > 100 then level = 100 end
+function obj:setVolume(level)
+  if not self:_ensureMusicRunning() then
+    return nil
+  end
 
-    local ok, result = hs.osascript.applescript(
-        string.format('tell application "Music" to set sound volume to %d', level)
-    )
+  -- clamp to 0–100 range
+  if level < 0 then level = 0 end
+  if level > 100 then level = 100 end
 
-    if ok then
-        hs.alert(string.format("Music volume set to %d%%", level))
-        return level
-    else
-        hs.alert("Failed to set Music volume")
-        return nil
-    end
+  hs.itunes.setVolume(level)
+  hs.alert(string.format("Music volume set to %d%%", level))
+  return level
 end
 
-
-
---- Gets the current volume level of the Music app via AppleScript.
+--- Gets the current volume level of the Music app.
 --
 -- @return (number or nil): Volume as a percentage (0-100), or nil if unavailable
---
--- @details
--- - Uses AppleScript to query the Music app directly
--- - Returns the sound volume value from the Music application
---
--- @note
--- Returns nil if Music app is not running or the query fails
-function obj:getMusicAppVolume()
-    local ok, result = hs.osascript.applescript('tell application "Music" to get sound volume')
-
-    if ok and result then
-        local volume = tonumber(result)
-        if volume then
-            hs.alert(string.format("Music volume: %d%%", volume))
-            return volume
-        end
-    end
-
-    hs.alert("Could not read Music volume")
+function obj:getVolume()
+  if not self:_ensureMusicRunning() then
     return nil
+  end
+
+  local volume = hs.itunes.getVolume()
+  if volume then
+    hs.alert(string.format("Music volume: %d%%", volume))
+    return volume
+  end
+
+  hs.alert("Could not read Music volume")
+  return nil
 end
 
 --- Adjusts the volume by a given percentage amount.
@@ -107,99 +196,54 @@ end
 -- @param delta (number): The percentage amount to adjust volume by (can be negative)
 --
 -- @return (number or nil): The new volume level if successful, nil otherwise
-function obj:adjustMusicAppVolume(delta)
-    local currentVolume = self:getMusicAppVolume()
-    if not currentVolume then
-        return nil
-    end
-
-    local newVolume = currentVolume + delta
-    return self:setMusicAppVolume(newVolume)
-end
-
-
-
---- Plays or pauses the current track.
---
--- @return (boolean): true if successful, false otherwise
-function obj:toggleMusicAppPlayPause()
-  return self:sendMusicAppCommand("playpause")
-end
-
---- Plays the next track.
---
--- @return (boolean): true if successful, false otherwise
-function obj:nextMusicAppTrack()
-  return self:sendMusicAppCommand("next track")
-end
-
---- Plays the previous track.
---
--- @return (boolean): true if successful, false otherwise
-function obj:previousMusicAppTrack()
-  return self:sendMusicAppCommand("previous track")
-end
-
---- Gets the currently playing track information (name, artist, album).
--- Checks if Music app is running and currently playing before retrieving info.
---
--- @return (string or nil): Formatted string "TrackName - Artist [Album]" if playing, nil otherwise
-function obj:getMusicAppCurrentTrack()
-  local script = [[
-    tell application "Music"
-      if it is running and player state is playing then
-        set trackName to name of current track
-        set trackArtist to artist of current track
-        set trackAlbum to album of current track
-        return trackName & " - " & trackArtist & " [" & trackAlbum & "]"
-      else
-        return "Not playing"
-      end if
-    end tell
-  ]]
-
-  local ok, result = hs.osascript.applescript(script)
-  if ok and result and result ~= "Not playing" then
-    return result
+function obj:adjustVolume(delta)
+  if not self:_ensureMusicRunning() then
+    return nil
   end
 
-  return nil
-end
-
---- Gets the current artist name.
---
--- @return (string or nil): Artist name, or nil if unavailable
-function obj:getMusicAppCurrentArtist()
-  local success, result = pcall(function()
-    return hs.osascript.applescript(
-      'tell application "Music" to artist of current track'
-    )
-  end)
-
-  if success and result and type(result) == "string" then
-    return result
+  local currentVolume = hs.itunes.getVolume()
+  if not currentVolume then
+    hs.alert("Could not read Music volume")
+    return nil
   end
 
-  return nil
+  local newVolume = currentVolume + delta
+  return self:setVolume(newVolume)
 end
 
---- Shows current track information in an alert.
+--- Skips to the next album asynchronously.
+-- Uses callbacks to avoid blocking Hammerspoon. Shows alert when done or if no next album exists.
+-- Respects the maxAlbumSkipAttempts attribute.
 --
--- @return (boolean): true if successful, false otherwise
---
--- @details
--- - Displays formatted track info: "TrackName - Artist [Album]"
--- - Uses the `alertDuration` attribute (default: 5 seconds)
--- - Customize duration by setting: `music.alertDuration = 3`
-function obj:showMusicAppCurrentTrack()
-  local track = self:getMusicAppCurrentTrack()
-
-  if not track then
-    hs.alert.show("No track currently playing", self.alertDuration)
+-- @return (boolean): true if skip initiated, false if Music not running
+function obj:nextAlbum()
+  if not self:_ensureMusicRunning() then
     return false
   end
 
-  hs.alert.show(track, self.alertDuration)
+  local startAlbum = hs.itunes.getCurrentAlbum()
+  local attempts = 0
+
+  local function checkAlbumChange()
+    attempts = attempts + 1
+    local currentAlbum = hs.itunes.getCurrentAlbum()
+
+    if currentAlbum ~= startAlbum then
+      hs.alert.show("Skipped to album: " .. (currentAlbum or "Unknown"))
+      return
+    end
+
+    if attempts >= self.maxAlbumSkipAttempts then
+      hs.alert.show("Skipped " .. attempts .. " tracks, no new album found")
+      return
+    end
+
+    hs.itunes.next()
+    hs.timer.doAfter(0.3, checkAlbumChange)
+  end
+
+  hs.itunes.next()
+  hs.timer.doAfter(0.3, checkAlbumChange)
   return true
 end
 
@@ -211,33 +255,26 @@ end
 -- - hotkeys.nextTrack: Hotkey for next track
 -- - hotkeys.previousTrack: Hotkey for previous track
 -- - hotkeys.showTrack: Hotkey to show current track
+-- - hotkeys.skipAlbum: Hotkey to skip to next album
 --
 -- @return (hs_music): Returns self for chaining
 function obj:init(hotkeys)
   hotkeys = hotkeys or {}
 
-  if hotkeys.togglePlayPause then
-    hs.hotkey.bind(hotkeys.togglePlayPause.mods, hotkeys.togglePlayPause.key, function()
-      self:toggleMusicAppPlayPause()
-    end)
-  end
+  local hotkeyMaps = {
+    togglePlayPause = self.togglePlayPause,
+    nextTrack = self.nextTrack,
+    previousTrack = self.previousTrack,
+    showTrack = self.showCurrentTrack,
+    skipAlbum = self.nextAlbum
+  }
 
-  if hotkeys.nextTrack then
-    hs.hotkey.bind(hotkeys.nextTrack.mods, hotkeys.nextTrack.key, function()
-      self:nextMusicAppTrack()
-    end)
-  end
-
-  if hotkeys.previousTrack then
-    hs.hotkey.bind(hotkeys.previousTrack.mods, hotkeys.previousTrack.key, function()
-      self:previousMusicAppTrack()
-    end)
-  end
-
-  if hotkeys.showTrack then
-    hs.hotkey.bind(hotkeys.showTrack.mods, hotkeys.showTrack.key, function()
-      self:showMusicAppCurrentTrack()
-    end)
+  for key, func in pairs(hotkeyMaps) do
+    if hotkeys[key] then
+      hs.hotkey.bind(hotkeys[key].mods, hotkeys[key].key, function()
+        func(self)
+      end)
+    end
   end
 
   return self
