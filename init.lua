@@ -56,7 +56,7 @@ end
 -- - Shows alerts for success/failure
 --
 -- @return (number or nil): The new volume level if successful, nil otherwise
-function obj:changeMusicAppVolume(level)
+function obj:setMusicAppVolume(level)
     -- clamp to 0–100 range
     if level < 0 then level = 0 end
     if level > 100 then level = 100 end
@@ -101,20 +101,20 @@ function obj:getMusicAppVolume()
     return nil
 end
 
---- Changes the volume by a given percentage amount.
+--- Adjusts the volume by a given percentage amount.
 -- Gets the current volume, adds the delta, and clamps to 0–100 range.
 --
--- @param delta (number): The percentage amount to change volume by (can be negative)
+-- @param delta (number): The percentage amount to adjust volume by (can be negative)
 --
 -- @return (number or nil): The new volume level if successful, nil otherwise
-function obj:changeVolume(delta)
+function obj:adjustMusicAppVolume(delta)
     local currentVolume = self:getMusicAppVolume()
     if not currentVolume then
         return nil
     end
 
     local newVolume = currentVolume + delta
-    return self:changeMusicAppVolume(newVolume)
+    return self:setMusicAppVolume(newVolume)
 end
 
 

@@ -24,9 +24,9 @@ A Hammerspoon spoon for controlling Apple Music playback and volume.
 
 ** Volume Control
 
-- =changeMusicAppVolume(level)= - Set volume to a specific level (0-100 percent); returns new volume or nil
+- =setMusicAppVolume(level)= - Set volume to a specific level (0-100 percent); returns new volume or nil
 - =getMusicAppVolume()= - Get current volume as percentage (0-100)
-- =changeVolume(delta)= - Change volume by a given amount (can be negative); returns new volume or nil
+- =adjustMusicAppVolume(delta)= - Adjust volume by a given amount (can be negative); returns new volume or nil
 
 
 ** Low-Level
@@ -51,13 +51,13 @@ music:nextMusicAppTrack()
 music:showMusicAppCurrentTrack()
 
 -- Set volume to specific level (50%)
-music:changeMusicAppVolume(50)
+music:setMusicAppVolume(50)
 
 -- Increase volume by 10%
-music:changeVolume(10)
+music:adjustMusicAppVolume(10)
 
 -- Decrease volume by 5%
-music:changeVolume(-5)
+music:adjustMusicAppVolume(-5)
 #+END_SRC
 
 * Requirements
