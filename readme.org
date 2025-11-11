@@ -10,7 +10,6 @@ A Hammerspoon spoon for controlling Apple Music playback and volume.
 - *Track Info*: Get and display current track name, artist, and album
 - *Volume Control*: Set Music app volume (0-100) via accessibility API
 - *Accessibility API*: Direct volume manipulation through UI sliders
-- *GridCraft Integration*: Menu-driven access to all music controls
 
 ** Playback Control
 
